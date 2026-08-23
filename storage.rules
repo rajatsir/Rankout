@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /payment_screenshots/{fileName} {
+      // Payment screenshots are sensitive — only a signed-in admin can view them.
+      allow read: if request.auth != null &&
+                     firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+
+      // Anyone submitting an entry can upload proof of payment.
+      allow write: if request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+  }
+}

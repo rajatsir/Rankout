@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null &&
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Admin allow-list — managed only via Firebase console / Admin SDK, never from the client.
+    match /admins/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /submissions/{id} {
+      // Public can only see approved entries. Admin sees everything (for the queue).
+      allow read: if resource.data.status == 'approved' || isAdmin();
+
+      // Anyone can submit a new entry, but it must start as 'pending' with sane fields.
+      allow create: if request.resource.data.status == 'pending'
+                    && request.resource.data.bid_amount is int
+                    && request.resource.data.bid_amount >= 10
+                    && request.resource.data.keys().hasAll(
+                         ['youtube_url','video_title','channel_name','bid_amount','utr','status','created_at']
+                       );
+
+      // Only an admin can move a pending entry to approved/rejected.
+      allow update: if isAdmin()
+                    && resource.data.status == 'pending'
+                    && request.resource.data.status in ['approved', 'rejected'];
+
+      allow delete: if false;
+    }
+  }
+}
